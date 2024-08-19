@@ -1,47 +1,41 @@
-const fs = require('fs');
-const path = require('path');
+const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 
-const logPath = 'C:\\Users\\Saumya Poojari\\Desktop\\1\\log_file.txt';
-const server = http.createServer();
+const app = express();
+const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-let clients = [];
-
 wss.on('connection', (ws) => {
-    clients.push(ws);
+    console.log('New client connected');
 
-    const lastLines = getLastLines(logPath, 10);
-    ws.send(JSON.stringify(lastLines));
+    ws.on('message', (message) => {
+        let textMessage;
+
+        if (typeof message === 'string') {
+            textMessage = message;
+        } else if (Buffer.isBuffer(message)) {
+            textMessage = message.toString('utf-8');
+        }
+
+        console.log(`Received message => ${textMessage}`);
+
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(textMessage);
+            }
+        });
+    });
 
     ws.on('close', () => {
-        clients = clients.filter(client => client !== ws);
+        console.log('Client disconnected');
+    });
+
+    ws.on('error', (error) => {
+        console.error(`WebSocket error: ${error.message}`);
     });
 });
 
-function getLastLines(filePath, linesCount) {
-    try {
-        const data = fs.readFileSync(filePath, 'utf-8');
-        const lines = data.split('\n').filter(Boolean);  // filter out any empty lines
-        return lines.slice(-linesCount);
-    } catch (error) {
-        console.error('Error reading file:', error);
-        return [];  // Return an empty array or handle the error as needed
-    }
-}
-
-
-fs.watchFile(logPath, (curr, prev) => {
-    if (curr.mtime > prev.mtime) {
-        const lastLines = getLastLines(logPath, 10);  // Fetch the last 10 lines whenever the file changes
-
-        clients.forEach(client => {
-            client.send(JSON.stringify(lastLines));
-        });
-    }
-});
-
-server.listen(8084, () => {
-    console.log('Server is listening on port 8084');
+server.listen(8083, () => {
+    console.log('Server is listening on port 8083');
 });
